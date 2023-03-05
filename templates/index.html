@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html data-bs-theme="dark">
+
+<head>
+    <title>Plagiarism Analyzer Tool</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- bootstrap -->
+    <link rel="stylesheet" href="https://unpkg.com/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css"
+        crossorigin="anonymous">
+</head>
+
+<body>
+    <main class="container">
+        <h1 class="pb-5 pt-5">Plagiarism Analyzer Tool</h1>
+
+        <div class="row">
+            <div class="col-12 mb-1">
+                Target Folder:
+
+                <div class="row p-3">
+                    <input type="text" class="col form-control" id="path" value="./data" placeholder="Path">
+                    <button class="btn col-auto btn-outline-primary ms-1" data-bs-toggle="modal"
+                        data-bs-target="#folder-chooser" onclick="load_folder()">
+                        Choose Folder
+                    </button>
+                </div>
+            </div>
+            <div class="col-12 mb-1">
+                <div class="d-flex align-items-center">
+                    Similar Ratio Larger than
+                    <input type="number" class="ms-1 form-control" id="ratio" placeholder="ratio" value="0.9"
+                        step="0.05" style="max-width: 10em;">
+                </div>
+            </div>
+            <div class="col-12 mb-1">
+                <button id="btn-load-compare-list" type="button" class="btn btn-primary">Start Analyze</button>
+            </div>
+            <div class="col-12 mb-1 text-end">
+                <button id="btn-load-compare-list" type="button" class="btn btn-outline-secondary"
+                    data-bs-target="#treeview" data-bs-toggle="modal" data-keyboard="false"
+                    onclick="showTreeView()">TreeView</button>
+            </div>
+        </div>
+        <hr>
+
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th scope="col">File1</th>
+                        <th scope="col">File2</th>
+                        <th scope="col">Ratio</th>
+                        <th scope="col"></th>
+                    </tr>
+                </thead>
+                <tbody id="compare-list">
+                    <tr>
+                        <td>Please click load compare list</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="treeview" class="modal fade" tabindex="-2" aria-hidden="true">
+            <div class="modal-dialog modal-fullscreen">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h1 class="modal-title fs-5">TreeView</h1>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="accordion" id="treeview-content">
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="comparer" class="modal fade" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-fullscreen">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h1 class="modal-title fs-5">Compare</h1>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="container" style="width:100%; height:100%;"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="folder-chooser" class="modal fade" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h1 class="modal-title fs-5">Choose Folder</h1>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="folder-chooser-btn-currentfolder" type="button" class="btn btn-secondary"
+                            data-bs-dismiss="modal">Select Current
+                            Folder</button>
+                    </div>
+                    <div class="modal-body">
+                        <small id="folder-chooser-path"></small>
+                        <button class="btn btn-sm btn-outline-primary ms-1"
+                            onclick="load_folder(DOM_FOLDER_CHOOSER_PATH.innerText + '/../')">
+                            Back
+                        </button>
+                        <div id="folder-chooser-folders" class="list-group mt-2">
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+
+    </main>
+    <script src="https://unpkg.com/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <!-- load monaco editor -->
+    <script src="https://unpkg.com/monaco-editor@0.36.1/min/vs/loader.js"></script>
+    <script>
+
+        const DOM_COMPARE_LIST = document.getElementById('compare-list')
+        const DOM_BTN_LOAD_COMPARE_LIST = document.getElementById('btn-load-compare-list')
+        const DOM_FOLDER_CHOOSER_PATH = document.getElementById('folder-chooser-path')
+        const DOM_FOLDER_CHOOSER_FOLDERS = document.getElementById('folder-chooser-folders')
+        const DOM_FOLDER_CHOOSER_BTN_CURRENTFOLDER = document.getElementById('folder-chooser-btn-currentfolder')
+
+        new bootstrap.Modal('#treeview', { keyboard: false })
+
+        DOM_BTN_LOAD_COMPARE_LIST.addEventListener('click', async (e) => {
+            DOM_BTN_LOAD_COMPARE_LIST.classList.add('disabled')
+            await get_analyzed_list()
+            DOM_BTN_LOAD_COMPARE_LIST.classList.remove('disabled')
+        })
+        DOM_FOLDER_CHOOSER_BTN_CURRENTFOLDER.addEventListener('click', async (e) => {
+            document.getElementById('path').value = DOM_FOLDER_CHOOSER_PATH.innerText
+        })
+
+        async function load_folder(path = '.') {
+            let folder_list = await axios.get('/api/list_system_path',
+                {
+                    params: {
+                        path: path,
+                    }
+                }
+            )
+            const data = folder_list.data
+            DOM_FOLDER_CHOOSER_PATH.innerText = data?.abspath
+            DOM_FOLDER_CHOOSER_FOLDERS.innerHTML = ``
+            data?.folders.forEach(folder => {
+                let dom = document.createElement('button')
+                dom.classList.add('list-group-item')
+                dom.classList.add('list-group-item-action')
+                dom.innerText = folder
+                dom.addEventListener('click', async (e) => {
+                    await load_folder(data.abspath + '/' + folder)
+                })
+                DOM_FOLDER_CHOOSER_FOLDERS.appendChild(dom)
+            })
+
+        }
+
+        async function get_analyzed_list() {
+            DOM_COMPARE_LIST.innerHTML = `
+                <tr>
+                    <td>Loading...</td>
+                </tr>
+            `
+            let compare_list = await axios.get('/api/analyze',
+                {
+                    params: {
+                        path: document.getElementById('path').value,
+                        ratio: document.getElementById('ratio').value
+                    }
+                }
+            )
+            window.analyzed_data = compare_list.data
+            showAnalyzedList()
+        }
+
+        async function showAnalyzedList() {
+            DOM_COMPARE_LIST.innerHTML = ``
+            window.analyzed_data?.similar.forEach(data => {
+                const {
+                    file1,
+                    file2,
+                    file1_abspath,
+                    file2_abspath,
+                    ratio,
+                    hash1,
+                    hash2,
+                } = data;
+                let dom = document.createElement('tr')
+                dom.innerHTML =
+                    `
+                    <td>
+                        ${file1}
+                        <br/>
+                        ${hash1 === hash2 ? `Both Hash: ${hash2}` : `Hash: ${hash1}`}
+                    </td>
+                    <td>
+                        ${file2}
+                        <br/>
+                        ${hash1 === hash2 ? '' : `Hash: ${hash2}`}
+                    </td>
+                    <td>${parseFloat(ratio).toFixed(3)}</td>
+                    <td>
+                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#comparer">
+                            Compare
+                        </button>
+                    </td>
+                `
+                dom.querySelector('button').addEventListener('click', async () => {
+                    setCompareData('Loading...', 'Loading...')
+                    const file1Content = (await axios.get(`/api/read_text?path=${file1_abspath}`)).data
+                    const file2Content = (await axios.get(`/api/read_text?path=${file2_abspath}`)).data
+                    setCompareData(file1Content.data, file2Content.data)
+                })
+                DOM_COMPARE_LIST.appendChild(dom)
+            });
+        }
+
+        function showTreeView() {
+            const similarList = window?.analyzed_data?.similar ?? [];
+            let treeDict = {}
+            similarList.forEach((data) => {
+                const {
+                    file1,
+                    file2,
+                    file1_abspath,
+                    file2_abspath,
+                    ratio,
+                    hash1,
+                    hash2,
+                } = data;
+                if (treeDict[file1] === undefined) {
+                    treeDict[file1] = []
+                }
+                if (treeDict[file2] === undefined) {
+                    treeDict[file2] = []
+                }
+                treeDict[file1].push({
+                    file1: file1,
+                    file2: file2,
+                    file1_abspath: file1_abspath,
+                    file2_abspath: file2_abspath,
+                    ratio: ratio,
+                    hash1: hash1,
+                    hash2: hash2,
+                })
+                treeDict[file2].push({
+                    file1: file2,
+                    file2: file1,
+                    file1_abspath: file2_abspath,
+                    file2_abspath: file1_abspath,
+                    ratio: ratio,
+                    hash1: hash2,
+                    hash2: hash1,
+                })
+            })
+            const DOM_TREEVIEW_CONTENT = document.getElementById('treeview-content');
+            DOM_TREEVIEW_CONTENT.innerHTML = ''
+            Object.keys(treeDict).forEach((key, index) => {
+                let dom = document.createElement('div')
+                dom.classList.add('accordion-item')
+                dom.innerHTML = `
+                <h2 class="accordion-header" id="heading${index}">
+                    <button class="accordion-button" type="button" data-bs-toggle="collapse"
+                        data-bs-target="#collapseTreeView${index}" aria-expanded="true" aria-controls="collapseTreeView${index}">
+                        ${key}
+                        <span class="ms-2 badge rounded-pill text-bg-secondary">${Object.keys(treeDict[key]).length}</span>
+                    </button>
+                </h2>
+                <div id="collapseTreeView${index}" class="accordion-collapse collapse show"
+                    aria-labelledby="heading${index}" data-bs-parent="#accordionExample">
+                    <div class="accordion-body">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th scope="col">File</th>
+                                    <th scope="col">Ratio</th>
+                                    <th scope="col">Hash</th>
+                                    <th scope="col"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                `
+                const accordionBody = dom.querySelector(`.accordion-body tbody`)
+                treeDict[key].forEach((data) => {
+                    const {
+                        file1,
+                        file2,
+                        file1_abspath,
+                        file2_abspath,
+                        ratio,
+                        hash1,
+                        hash2,
+                    } = data;
+                    let dom = document.createElement('tr')
+                    dom.innerHTML = `
+                    <td>${file2}</td>
+                    <td>${parseFloat(ratio).toFixed(3)}</td>
+                    <td>${hash1 === hash2 ? 'Same Hash: ' + hash1 : 'Hash: ' + hash2}</td>
+                    <button type="button" class="btn btn-primary">
+                        Compare
+                    </button>
+                    `
+                    dom.querySelector('button').addEventListener('click', async () => {
+                        const comparerModal = new bootstrap.Modal('#comparer')
+                        comparerModal.show();
+                        setCompareData('Loading...', 'Loading...')
+                        const file1Content = (await axios.get(`/api/read_text?path=${file1_abspath}`)).data
+                        const file2Content = (await axios.get(`/api/read_text?path=${file2_abspath}`)).data
+                        setCompareData(file1Content.data, file2Content.data)
+                    })
+                    accordionBody.appendChild(dom)
+                })
+                DOM_TREEVIEW_CONTENT.appendChild(dom)
+            })
+        }
+
+        function setCompareData(file1Content, file2Content) {
+            var file1 = monaco.editor.createModel(
+                file1Content,
+                "text/plain"
+            );
+            var file2 = monaco.editor.createModel(
+                file2Content,
+                "text/plain"
+            );
+            diffEditor.setModel({
+                original: file1,
+                modified: file2,
+            });
+        }
+
+        // Load monaco editor using amd loader
+        require.config({ paths: { vs: 'https://unpkg.com/monaco-editor@0.36.1/dev/vs' } });
+        require(['vs/editor/editor.main'], function () {
+
+            var file1 = monaco.editor.createModel(
+                "just some text\n\nHello World\n\nSome more text",
+                "text/plain"
+            );
+            var file2 = monaco.editor.createModel(
+                "just some Text\n\nHello World\n\nSome more changes",
+                "text/plain"
+            );
+
+            var diffEditor = monaco.editor.createDiffEditor(
+                document.getElementById("container"),
+                {
+                    automaticLayout: true,
+                    readOnly: true,
+                    theme: 'vs-dark',
+                }
+            );
+            diffEditor.setModel({
+                original: file1,
+                modified: file2,
+            });
+            var navi = monaco.editor.createDiffNavigator(diffEditor, {
+                followsCaret: true, // resets the navigator state when the user selects something in the editor
+                ignoreCharChanges: true, // jump from line to line
+            });
+
+            window.diffEditor = diffEditor
+
+        });
+
+    </script>
+</body>
+
+</html>
