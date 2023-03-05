@@ -1,36 +1,46 @@
 from flask import Flask, render_template, request
 import utils as utils
 import os
+from worker import Worker
 
 app = Flask(__name__)
 
 # analyze
-@app.route('/api/analyze')
+@app.route('/api/run_analyze')
 def analyze():
     path = request.args.get('path') or ''
     ratio = request.args.get('ratio') or 0.9
     ratio = float(ratio)
     if not os.path.isdir(path):
-        return {
-            'similar': []
-        }
+        return { 'error': 'path is not a directory' }
     if not isinstance(ratio, float):
-        return {
-            'similar': []
-        }
-    if ratio < 0 or ratio > 1:
-        return {
-            'similar': []
-        }
+        return { 'error': 'ratio is not a float' }
+    if ratio < 0.0 or ratio > 1.0:
+        return { 'error': 'ratio is not in range 0.0-1.0' }
+    return Worker.run(path, ratio)
 
-    similar = utils.get_similar_files(path, ratio)
+# kill 
+@app.route('/api/kill_analyze')
+def kill_analyze():
+    path = request.args.get('path') or ''
+    result = Worker.kill(path)
+    return result
+
+# get progress
+@app.route('/api/get_progress')
+def get_progress():
+    path = request.args.get('path') or ''
+    progress = Worker.get_progress(path)
+    result = Worker.get_result(path)
+    if progress is None:
+        return { 'error': 'worker is not running' }
     return {
-        'similar': similar
+        'progress': progress,
+        'result': result,
     }
+    
 
 # list system path
-
-
 @app.route('/api/list_system_path')
 def list_system_path():
     path = request.args.get('path') or ''

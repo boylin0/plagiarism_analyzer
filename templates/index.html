@@ -19,7 +19,8 @@
                 Target Folder:
 
                 <div class="row p-3">
-                    <input type="text" class="col form-control" id="path" value="./data" placeholder="Path">
+                    <input type="text" class="col form-control" id="path"
+                        value="/home/user/boyi/SmartTurnin_PARTY/c.1A.hw1.Q9" placeholder="Path">
                     <button class="btn col-auto btn-outline-primary ms-1" data-bs-toggle="modal"
                         data-bs-target="#folder-chooser" onclick="load_folder()">
                         Choose Folder
@@ -28,13 +29,19 @@
             </div>
             <div class="col-12 mb-1">
                 <div class="d-flex align-items-center">
-                    Similar Ratio Larger than
+                    Similar Ratio Greater than
                     <input type="number" class="ms-1 form-control" id="ratio" placeholder="ratio" value="0.9"
                         step="0.05" style="max-width: 10em;">
                 </div>
             </div>
             <div class="col-12 mb-1">
                 <button id="btn-load-compare-list" type="button" class="btn btn-primary">Start Analyze</button>
+            </div>
+            <div class="col-12 mb-1">
+                <div class="progress" role="progressbar">
+                    <div id="analyzing-progress" class="progress-bar progress-bar-striped progress-bar-animated"
+                        style="width: 75%"></div>
+                </div>
             </div>
             <div class="col-12 mb-1 text-end">
                 <button id="btn-load-compare-list" type="button" class="btn btn-outline-secondary"
@@ -137,6 +144,7 @@
         const DOM_FOLDER_CHOOSER_BTN_CURRENTFOLDER = document.getElementById('folder-chooser-btn-currentfolder')
 
         new bootstrap.Modal('#treeview', { keyboard: false })
+        setAnalyzingProgress(0);
 
         DOM_BTN_LOAD_COMPARE_LIST.addEventListener('click', async (e) => {
             DOM_BTN_LOAD_COMPARE_LIST.classList.add('disabled')
@@ -172,20 +180,51 @@
         }
 
         async function get_analyzed_list() {
+            const path = document.getElementById('path').value
+            const ratio = document.getElementById('ratio').value
+            window.analyzed_data = {
+                similar: null,
+            }
+            setAnalyzingProgress(0);
             DOM_COMPARE_LIST.innerHTML = `
                 <tr>
                     <td>Loading...</td>
                 </tr>
             `
-            let compare_list = await axios.get('/api/analyze',
+            let compare_list = await axios.get('/api/run_analyze',
                 {
                     params: {
-                        path: document.getElementById('path').value,
-                        ratio: document.getElementById('ratio').value
+                        path: path,
+                        ratio: ratio,
                     }
                 }
             )
-            window.analyzed_data = compare_list.data
+            let data = compare_list.data
+            let result = null
+            if (typeof data['error'] !== 'undefined') {
+                alert(data.error)
+                DOM_COMPARE_LIST.innerHTML = ``
+                return;
+            }
+            while (true) {
+                await new Promise(r => setTimeout(r, 300));
+                let progressData = (await axios.get('/api/get_progress', {
+                    params: {
+                        path: path,
+                    }
+                })).data
+                if (progressData.result !== null) {
+                    result = progressData.result
+                    break;
+                }
+                const total = progressData.progress?.total
+                const current = progressData.progress?.current
+                setAnalyzingProgress(current / total * 100)
+            }
+            setAnalyzingProgress(100)
+            window.analyzed_data = {
+                similar: result
+            }
             showAnalyzedList()
         }
 
@@ -317,9 +356,11 @@
                     <td>${file2}</td>
                     <td>${parseFloat(ratio).toFixed(3)}</td>
                     <td>${hash1 === hash2 ? 'Same Hash: ' + hash1 : 'Hash: ' + hash2}</td>
+                    <td>
                     <button type="button" class="btn btn-primary">
                         Compare
                     </button>
+                    </td>
                     `
                     dom.querySelector('button').addEventListener('click', async () => {
                         const comparerModal = new bootstrap.Modal('#comparer')
@@ -348,6 +389,12 @@
                 original: file1,
                 modified: file2,
             });
+        }
+
+        function setAnalyzingProgress(progressPercentage) {
+            const DOM_ANALYZING_PROGRESS = document.getElementById('analyzing-progress');
+            DOM_ANALYZING_PROGRESS.style.width = `${progressPercentage}%`
+            DOM_ANALYZING_PROGRESS.innerHTML = `${progressPercentage.toFixed(2)}%`
         }
 
         // Load monaco editor using amd loader
