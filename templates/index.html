@@ -112,7 +112,7 @@
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-footer">
-                        <button id="folder-chooser-btn-currentfolder" type="button" class="btn btn-secondary"
+                        <button id="folder-chooser-btn-currentfolder" type="button" class="btn btn-success"
                             data-bs-dismiss="modal">Select Current
                             Folder</button>
                     </div>
@@ -168,6 +168,10 @@
             document.getElementById('path').value = DOM_FOLDER_CHOOSER_PATH.innerText
         })
 
+        function exitWindow() {
+            return 'Are you sure you want to exit?';
+        }
+
         async function load_folder(path = '.') {
             DOM_FOLDER_CHOOSER_FOLDERS.innerHTML = `Loading...`
             let folder_list = await axios.get('/api/list_system_path',
@@ -214,6 +218,7 @@
                     }
                 }
             )
+            window.onbeforeunload = exitWindow
             DOM_BTN_FORCE_STOP.style.display = 'inline-block'
             DOM_COMPARE_STATUS.innerText = `Analyzing...`
             let data = compare_list.data
@@ -223,6 +228,7 @@
                 DOM_COMPARE_LIST.innerHTML = ''
                 DOM_COMPARE_STATUS.innerText = ''
                 DOM_BTN_FORCE_STOP.style.display = 'none'
+                window.onbeforeunload = null
                 return;
             }
             while (true) {
@@ -241,6 +247,7 @@
                 DOM_COMPARE_STATUS.innerText = `Analyzing ${current} / ${total}`
                 setAnalyzingProgress(current / total * 100)
             }
+            window.onbeforeunload = null
             DOM_BTN_FORCE_STOP.style.display = 'none'
             setAnalyzingProgress(100)
             DOM_COMPARE_STATUS.innerText = `Path: ${path} | Ratio: ${ratio} Analyzed.`
