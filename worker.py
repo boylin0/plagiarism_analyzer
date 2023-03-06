@@ -72,6 +72,8 @@ class Worker:
                         'file2': files[j].replace(path, ''),
                         'file1_abspath': files[i],
                         'file2_abspath': files[j],
+                        'file1_size': os.path.getsize(files[i]),
+                        'file2_size': os.path.getsize(files[j]),
                         'ratio': ratio,
                         'hash1': hashlib.md5(f1_content.encode('utf-8')).hexdigest(),
                         'hash2': hashlib.md5(f2_content.encode('utf-8')).hexdigest(),

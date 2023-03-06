@@ -77,6 +77,12 @@
                     <div class="modal-header">
                         <h1 class="modal-title fs-5">TreeView</h1>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+
+                    </div>
+                    <div class="row p-2">
+                        <div class="col-12">
+                            <input id="treeview-search" type="text" class="form-control" placeholder="Search">
+                        </div>
                     </div>
                     <div class="modal-body">
                         <div class="accordion" id="treeview-content">
@@ -148,6 +154,7 @@
         const DOM_FOLDER_CHOOSER_FOLDERS = document.getElementById('folder-chooser-folders')
         const DOM_FOLDER_CHOOSER_BTN_CURRENTFOLDER = document.getElementById('folder-chooser-btn-currentfolder')
         const DOM_COMPARE_STATUS = document.getElementById('compare-status')
+        const DOM_TREEVIEW_SEARCH = document.getElementById('treeview-search')
 
         DOM_BTN_FORCE_STOP.style.display = 'none'
         new bootstrap.Modal('#treeview', { keyboard: false })
@@ -171,6 +178,14 @@
         })
         DOM_FOLDER_CHOOSER_BTN_CURRENTFOLDER.addEventListener('click', async (e) => {
             document.getElementById('path').value = DOM_FOLDER_CHOOSER_PATH.innerText
+        })
+        // debounce
+        let timeout = null
+        DOM_TREEVIEW_SEARCH.addEventListener('input', async (e) => {
+            clearTimeout(timeout)
+            timeout = setTimeout(async () => {
+                showTreeView()
+            }, 500)
         })
 
         function exitWindow() {
@@ -268,6 +283,32 @@
             showAnalyzedList()
         }
 
+        function to_readable_filesize(size) {
+            if (size < 1024) {
+                return size + ' Bytes'
+            } else if (size < 1024 * 1024) {
+                return (size / 1024).toFixed(2) + ' KB'
+            } else if (size < 1024 * 1024 * 1024) {
+                return (size / 1024 / 1024).toFixed(2) + ' MB'
+            } else {
+                return (size / 1024 / 1024 / 1024).toFixed(2) + ' GB'
+            }
+        }
+        function readable_filesize_toBytes(size) {
+            size = size.toLowerCase()
+            if (size.endsWith('gb')) {
+                return parseFloat(size) * 1024 * 1024 * 1024
+            } else if (size.endsWith('mb')) {
+                return parseFloat(size) * 1024 * 1024
+            } else if (size.endsWith('kb')) {
+                return parseFloat(size) * 1024
+            } else if (size.endsWith('b')) {
+                return parseFloat(size)
+            } else {
+                return parseFloat(size)
+            }
+        }
+
         async function showAnalyzedList() {
             DOM_COMPARE_LIST.innerHTML = ``
             window.analyzed_data?.similar.forEach(data => {
@@ -276,6 +317,8 @@
                     file2,
                     file1_abspath,
                     file2_abspath,
+                    file1_size,
+                    file2_size,
                     ratio,
                     hash1,
                     hash2,
@@ -284,12 +327,12 @@
                 dom.innerHTML =
                     `
                     <td>
-                        ${file1}
+                        ${file1} <span class="badge text-bg-secondary">${to_readable_filesize(file1_size)}</span>
                         <br/>
                         ${hash1 === hash2 ? `Both Hash: ${hash2}` : `Hash: ${hash1}`}
                     </td>
                     <td>
-                        ${file2}
+                        ${file2} <span class="badge text-bg-secondary">${to_readable_filesize(file2_size)}</span>
                         <br/>
                         ${hash1 === hash2 ? '' : `Hash: ${hash2}`}
                     </td>
@@ -312,6 +355,7 @@
 
         function showTreeView() {
             const similarList = window?.analyzed_data?.similar ?? [];
+            const searchText = DOM_TREEVIEW_SEARCH.value
             let treeDict = {}
             similarList.forEach((data) => {
                 const {
@@ -319,6 +363,8 @@
                     file2,
                     file1_abspath,
                     file2_abspath,
+                    file1_size,
+                    file2_size,
                     ratio,
                     hash1,
                     hash2,
@@ -334,6 +380,8 @@
                     file2: file2,
                     file1_abspath: file1_abspath,
                     file2_abspath: file2_abspath,
+                    file1_size: file1_size,
+                    file2_size: file2_size,
                     ratio: ratio,
                     hash1: hash1,
                     hash2: hash2,
@@ -343,6 +391,8 @@
                     file2: file1,
                     file1_abspath: file2_abspath,
                     file2_abspath: file1_abspath,
+                    file1_size: file2_size,
+                    file2_size: file1_size,
                     ratio: ratio,
                     hash1: hash2,
                     hash2: hash1,
@@ -350,6 +400,14 @@
             })
             const DOM_TREEVIEW_CONTENT = document.getElementById('treeview-content');
             DOM_TREEVIEW_CONTENT.innerHTML = ''
+            // filter search
+            if (searchText !== '') {
+                Object.keys(treeDict).forEach((key) => {
+                    if (!key.includes(searchText)) {
+                        delete treeDict[key]
+                    }
+                })
+            }
             Object.keys(treeDict).forEach((key, index) => {
                 let dom = document.createElement('div')
                 dom.classList.add('accordion-item')
@@ -387,13 +445,17 @@
                         file2,
                         file1_abspath,
                         file2_abspath,
+                        file1_size,
+                        file2_size,
                         ratio,
                         hash1,
                         hash2,
                     } = data;
                     let dom = document.createElement('tr')
                     dom.innerHTML = `
-                    <td>${file2}</td>
+                    <td>
+                        ${file2} <span class="badge text-bg-secondary">${to_readable_filesize(file2_size)}</span>
+                    </td>
                     <td>${parseFloat(ratio).toFixed(3)}</td>
                     <td>${hash1 === hash2 ? 'Same Hash: ' + hash1 : 'Hash: ' + hash2}</td>
                     <td>
