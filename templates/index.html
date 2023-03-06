@@ -22,7 +22,7 @@
                     <input type="text" class="col form-control" id="path"
                         value="/home/user/boyi/SmartTurnin_PARTY/c.1A.hw1.Q9" placeholder="Path">
                     <button class="btn col-auto btn-outline-primary ms-1" data-bs-toggle="modal"
-                        data-bs-target="#folder-chooser" onclick="load_folder()">
+                        data-bs-target="#folder-chooser" id="btn-choose-folder">
                         Choose Folder
                     </button>
                 </div>
@@ -139,9 +139,11 @@
     <script src="https://unpkg.com/monaco-editor@0.36.1/min/vs/loader.js"></script>
     <script>
 
+        const DOM_PATH = document.getElementById('path')
         const DOM_COMPARE_LIST = document.getElementById('compare-list')
         const DOM_BTN_START_ANALYZE = document.getElementById('btn-start-analyze')
         const DOM_BTN_FORCE_STOP = document.getElementById('btn-force-stop')
+        const DOM_BTN_CHOOSE_FOLDER = document.getElementById('btn-choose-folder')
         const DOM_FOLDER_CHOOSER_PATH = document.getElementById('folder-chooser-path')
         const DOM_FOLDER_CHOOSER_FOLDERS = document.getElementById('folder-chooser-folders')
         const DOM_FOLDER_CHOOSER_BTN_CURRENTFOLDER = document.getElementById('folder-chooser-btn-currentfolder')
@@ -151,6 +153,9 @@
         new bootstrap.Modal('#treeview', { keyboard: false })
         setAnalyzingProgress(0);
 
+        DOM_BTN_CHOOSE_FOLDER.addEventListener('click', async (e) => {
+            load_folder()
+        })
         DOM_BTN_START_ANALYZE.addEventListener('click', async (e) => {
             DOM_BTN_START_ANALYZE.classList.add('disabled')
             await start_analyze()
@@ -204,6 +209,8 @@
                 similar: null,
             }
             setAnalyzingProgress(0);
+            DOM_PATH.disabled = true
+            DOM_BTN_CHOOSE_FOLDER.disabled = true
             DOM_COMPARE_LIST.innerHTML = `
             <tr>
                 <td>Loading...</td>
@@ -225,6 +232,8 @@
             let result = null
             if (typeof data['error'] !== 'undefined') {
                 alert(data.error)
+                DOM_PATH.disabled = false
+                DOM_BTN_CHOOSE_FOLDER.disabled = false
                 DOM_COMPARE_LIST.innerHTML = ''
                 DOM_COMPARE_STATUS.innerText = ''
                 DOM_BTN_FORCE_STOP.style.display = 'none'
@@ -247,6 +256,8 @@
                 DOM_COMPARE_STATUS.innerText = `Analyzing ${current} / ${total}`
                 setAnalyzingProgress(current / total * 100)
             }
+            DOM_PATH.disabled = false
+            DOM_BTN_CHOOSE_FOLDER.disabled = false
             window.onbeforeunload = null
             DOM_BTN_FORCE_STOP.style.display = 'none'
             setAnalyzingProgress(100)
