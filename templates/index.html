@@ -27,24 +27,26 @@
                     </button>
                 </div>
             </div>
-            <div class="col-12 mb-1">
+            <div class="col-12 mb-3">
                 <div class="d-flex align-items-center">
                     Similar Ratio Greater than
                     <input type="number" class="ms-1 form-control" id="ratio" placeholder="ratio" value="0.9"
                         step="0.05" style="max-width: 10em;">
                 </div>
             </div>
-            <div class="col-12 mb-1">
-                <button id="btn-load-compare-list" type="button" class="btn btn-primary">Start Analyze</button>
+            <div class="col-12 mb-3">
+                <button id="btn-start-analyze" type="button" class="btn btn-primary">Start Analyze</button>
+                <button id="btn-force-stop" type="button" class="btn btn-danger">Force Stop</button>
+                <small class="ms-2" id="compare-status"></small>
             </div>
-            <div class="col-12 mb-1">
+            <div class="col-12 mb-3">
                 <div class="progress" role="progressbar">
                     <div id="analyzing-progress" class="progress-bar progress-bar-striped progress-bar-animated"
                         style="width: 0%"></div>
                 </div>
             </div>
             <div class="col-12 mb-1 text-end">
-                <button id="btn-load-compare-list" type="button" class="btn btn-outline-secondary"
+                <button id="btn-start-analyze" type="button" class="btn btn-outline-secondary"
                     data-bs-target="#treeview" data-bs-toggle="modal" data-keyboard="false"
                     onclick="showTreeView()">TreeView</button>
             </div>
@@ -138,24 +140,36 @@
     <script>
 
         const DOM_COMPARE_LIST = document.getElementById('compare-list')
-        const DOM_BTN_LOAD_COMPARE_LIST = document.getElementById('btn-load-compare-list')
+        const DOM_BTN_START_ANALYZE = document.getElementById('btn-start-analyze')
+        const DOM_BTN_FORCE_STOP = document.getElementById('btn-force-stop')
         const DOM_FOLDER_CHOOSER_PATH = document.getElementById('folder-chooser-path')
         const DOM_FOLDER_CHOOSER_FOLDERS = document.getElementById('folder-chooser-folders')
         const DOM_FOLDER_CHOOSER_BTN_CURRENTFOLDER = document.getElementById('folder-chooser-btn-currentfolder')
+        const DOM_COMPARE_STATUS = document.getElementById('compare-status')
 
+        DOM_BTN_FORCE_STOP.style.display = 'none'
         new bootstrap.Modal('#treeview', { keyboard: false })
         setAnalyzingProgress(0);
 
-        DOM_BTN_LOAD_COMPARE_LIST.addEventListener('click', async (e) => {
-            DOM_BTN_LOAD_COMPARE_LIST.classList.add('disabled')
-            await get_analyzed_list()
-            DOM_BTN_LOAD_COMPARE_LIST.classList.remove('disabled')
+        DOM_BTN_START_ANALYZE.addEventListener('click', async (e) => {
+            DOM_BTN_START_ANALYZE.classList.add('disabled')
+            await start_analyze()
+            DOM_BTN_START_ANALYZE.classList.remove('disabled')
+        })
+        DOM_BTN_FORCE_STOP.addEventListener('click', async (e) => {
+            const path = document.getElementById('path').value
+            const { data } = await axios.get('/api/kill_analyze', { params: { path: path } })
+            if (typeof data['error'] !== 'undefined') {
+                alert(data['error'])
+                return;
+            }
         })
         DOM_FOLDER_CHOOSER_BTN_CURRENTFOLDER.addEventListener('click', async (e) => {
             document.getElementById('path').value = DOM_FOLDER_CHOOSER_PATH.innerText
         })
 
         async function load_folder(path = '.') {
+            DOM_FOLDER_CHOOSER_FOLDERS.innerHTML = `Loading...`
             let folder_list = await axios.get('/api/list_system_path',
                 {
                     params: {
@@ -165,7 +179,7 @@
             )
             const data = folder_list.data
             DOM_FOLDER_CHOOSER_PATH.innerText = data?.abspath
-            DOM_FOLDER_CHOOSER_FOLDERS.innerHTML = ``
+            DOM_FOLDER_CHOOSER_FOLDERS.innerHTML = ''
             data?.folders.forEach(folder => {
                 let dom = document.createElement('button')
                 dom.classList.add('list-group-item')
@@ -179,7 +193,7 @@
 
         }
 
-        async function get_analyzed_list() {
+        async function start_analyze() {
             const path = document.getElementById('path').value
             const ratio = document.getElementById('ratio').value
             window.analyzed_data = {
@@ -187,10 +201,11 @@
             }
             setAnalyzingProgress(0);
             DOM_COMPARE_LIST.innerHTML = `
-                <tr>
-                    <td>Loading...</td>
+            <tr>
+                <td>Loading...</td>
                 </tr>
-            `
+                `
+            DOM_COMPARE_STATUS.innerText = `Waiting for analyze...`
             let compare_list = await axios.get('/api/run_analyze',
                 {
                     params: {
@@ -199,11 +214,15 @@
                     }
                 }
             )
+            DOM_BTN_FORCE_STOP.style.display = 'inline-block'
+            DOM_COMPARE_STATUS.innerText = `Analyzing...`
             let data = compare_list.data
             let result = null
             if (typeof data['error'] !== 'undefined') {
                 alert(data.error)
-                DOM_COMPARE_LIST.innerHTML = ``
+                DOM_COMPARE_LIST.innerHTML = ''
+                DOM_COMPARE_STATUS.innerText = ''
+                DOM_BTN_FORCE_STOP.style.display = 'none'
                 return;
             }
             while (true) {
@@ -219,9 +238,12 @@
                 }
                 const total = progressData.progress?.total
                 const current = progressData.progress?.current
+                DOM_COMPARE_STATUS.innerText = `Analyzing ${current} / ${total}`
                 setAnalyzingProgress(current / total * 100)
             }
+            DOM_BTN_FORCE_STOP.style.display = 'none'
             setAnalyzingProgress(100)
+            DOM_COMPARE_STATUS.innerText = `Path: ${path} | Ratio: ${ratio} Analyzed.`
             window.analyzed_data = {
                 similar: result
             }

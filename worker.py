@@ -26,6 +26,7 @@ class Worker:
             'progress': None,
             'result': None,
             'thread': t,
+            'kill_signal': threading.Event(),
         })
         t.start()
         return {'message': 'success'}
@@ -56,6 +57,10 @@ class Worker:
         w['progress']['total'] = int(len(files) * (len(files) - 1) / 2)
         for i in range(len(files)):
             for j in range(i+1, len(files)):
+                # check kill signal
+                if w['kill_signal'].is_set():
+                    w['result'] = []
+                    return
                 w['progress']['current'] += 1
                 w['progress']['ratio'] = w['progress']['current'] / w['progress']['total']
                 f1_content = read_text_file_byCache(files[i])
@@ -81,8 +86,9 @@ class Worker:
         w = Worker._getWorker(path)
         if w is None:
             return { 'error': 'worker is not running' }
-        if w['thread'].is_alive():
-            w['thread'].kill()
+        if not w['thread'].is_alive():
+            return { 'error': 'worker is not running' }
+        w['kill_signal'].set()
         return { 'message': 'success' }
 
     @staticmethod
