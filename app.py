@@ -2,6 +2,7 @@ from flask import Flask, render_template, request
 import utils as utils
 import os
 from worker import Worker
+from cache import clear_cache
 
 app = Flask(__name__)
 
@@ -17,6 +18,7 @@ def analyze():
         return { 'error': 'ratio is not a float' }
     if ratio < 0.0 or ratio > 1.0:
         return { 'error': 'ratio is not in range 0.0-1.0' }
+    clear_cache()
     return Worker.run(path, ratio)
 
 # kill 

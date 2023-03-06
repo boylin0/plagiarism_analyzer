@@ -53,7 +53,7 @@ class Worker:
         }
         # check similar
         similar = []
-        w['progress']['total'] = len(files) * (len(files) - 1) / 2
+        w['progress']['total'] = int(len(files) * (len(files) - 1) / 2)
         for i in range(len(files)):
             for j in range(i+1, len(files)):
                 w['progress']['current'] += 1
