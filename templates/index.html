@@ -28,10 +28,15 @@
                 </div>
             </div>
             <div class="col-12 mb-3">
-                <div class="d-flex align-items-center">
+                <div class="d-flex align-items-center mb-1">
                     Similar Ratio Greater than
                     <input type="number" class="ms-1 form-control" id="ratio" placeholder="ratio" value="0.9"
                         step="0.05" style="max-width: 10em;">
+                </div>
+                <div class="d-flex align-items-center mb-1">
+                    Worker Count
+                    <input type="number" class="ms-1 form-control" id="worker-count" placeholder="ratio" value="8"
+                        step="1" style="max-width: 10em;">
                 </div>
             </div>
             <div class="col-12 mb-3">
@@ -46,6 +51,10 @@
                 </div>
             </div>
             <div class="col-12 mb-1 text-end">
+                <label>
+                    <input type="checkbox" class="form-check-input" id="by-normalized-ratio">
+                    By Normalized Ratio
+                </label>
                 <button id="btn-start-analyze" type="button" class="btn btn-outline-secondary"
                     data-bs-target="#treeview" data-bs-toggle="modal" data-keyboard="false"
                     onclick="showTreeView()">TreeView</button>
@@ -60,6 +69,7 @@
                         <th scope="col">File1</th>
                         <th scope="col">File2</th>
                         <th scope="col">Ratio</th>
+                        <th scope="col">Normalized Ratio</th>
                         <th scope="col"></th>
                     </tr>
                 </thead>
@@ -104,6 +114,8 @@
                         <div id="container" style="width:100%; height:100%;"></div>
                     </div>
                     <div class="modal-footer">
+                        <b>File1:</b>&nbsp;<div id="comparer-file1Path"></div>
+                        <b>File2:</b>&nbsp;<div id="comparer-file2Path"></div>
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     </div>
                 </div>
@@ -155,11 +167,17 @@
         const DOM_FOLDER_CHOOSER_BTN_CURRENTFOLDER = document.getElementById('folder-chooser-btn-currentfolder')
         const DOM_COMPARE_STATUS = document.getElementById('compare-status')
         const DOM_TREEVIEW_SEARCH = document.getElementById('treeview-search')
+        const DOM_WORKER_COUNT = document.getElementById('worker-count')
+        const DOM_BY_NORMALIZED_RATIO = document.getElementById('by-normalized-ratio')
 
         DOM_BTN_FORCE_STOP.style.display = 'none'
         new bootstrap.Modal('#treeview', { keyboard: false })
         setAnalyzingProgress(0);
 
+
+        DOM_BY_NORMALIZED_RATIO.addEventListener('change', async (e) => {
+            showAnalyzedList();
+        })
         DOM_BTN_CHOOSE_FOLDER.addEventListener('click', async (e) => {
             load_folder()
         })
@@ -220,6 +238,7 @@
         async function start_analyze() {
             const path = document.getElementById('path').value
             const ratio = document.getElementById('ratio').value
+            const workerCount = document.getElementById('worker-count').value
             window.analyzed_data = {
                 similar: null,
             }
@@ -237,6 +256,7 @@
                     params: {
                         path: path,
                         ratio: ratio,
+                        workerCount: workerCount,
                     }
                 }
             )
@@ -311,7 +331,18 @@
 
         async function showAnalyzedList() {
             DOM_COMPARE_LIST.innerHTML = ``
-            window.analyzed_data?.similar.forEach(data => {
+            const byNormalizedRatio = DOM_BY_NORMALIZED_RATIO.checked
+            let sortedData = window.analyzed_data?.similar;
+            if(byNormalizedRatio) {
+                sortedData = window.analyzed_data?.similar.sort((a, b) => {
+                    return b.ratio_normalized - a.ratio_normalized
+                })
+            } else {
+                sortedData = window.analyzed_data?.similar.sort((a, b) => {
+                    return b.ratio - a.ratio
+                })
+            }
+            sortedData.forEach(data => {
                 const {
                     file1,
                     file2,
@@ -320,6 +351,7 @@
                     file1_size,
                     file2_size,
                     ratio,
+                    ratio_normalized,
                     hash1,
                     hash2,
                 } = data;
@@ -337,17 +369,27 @@
                         ${hash1 === hash2 ? '' : `Hash: ${hash2}`}
                     </td>
                     <td>${parseFloat(ratio).toFixed(3)}</td>
+                    <td>${parseFloat(ratio_normalized).toFixed(3)}</td>
                     <td>
-                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#comparer">
+                        <button id="compare" type="button" class="btn mb-1 btn-primary" data-bs-toggle="modal" data-bs-target="#comparer">
                             Compare
+                        </button>
+                        <button id="compare_normalized" type="button" class="btn mb-1 btn-primary" data-bs-toggle="modal" data-bs-target="#comparer">
+                            Compare (Normalized)
                         </button>
                     </td>
                 `
-                dom.querySelector('button').addEventListener('click', async () => {
-                    setCompareData('Loading...', 'Loading...')
+                dom.querySelector('#compare').addEventListener('click', async () => {
+                    setCompareData(file1, file2, 'Loading...', 'Loading...')
                     const file1Content = (await axios.get(`/api/read_text?path=${file1_abspath}`)).data
                     const file2Content = (await axios.get(`/api/read_text?path=${file2_abspath}`)).data
-                    setCompareData(file1Content.data, file2Content.data)
+                    setCompareData(file1, file2, file1Content.data, file2Content.data)
+                })
+                dom.querySelector('#compare_normalized').addEventListener('click', async () => {
+                    setCompareData(file1, file2, 'Loading...', 'Loading...')
+                    const file1Content = (await axios.get(`/api/read_text?path=${file1_abspath}&normalized=true`)).data
+                    const file2Content = (await axios.get(`/api/read_text?path=${file2_abspath}&normalized=true`)).data
+                    setCompareData(file1, file2, file1Content.data, file2Content.data)
                 })
                 DOM_COMPARE_LIST.appendChild(dom)
             });
@@ -366,6 +408,7 @@
                     file1_size,
                     file2_size,
                     ratio,
+                    ratio_normalized,
                     hash1,
                     hash2,
                 } = data;
@@ -383,6 +426,7 @@
                     file1_size: file1_size,
                     file2_size: file2_size,
                     ratio: ratio,
+                    ratio_normalized: ratio_normalized,
                     hash1: hash1,
                     hash2: hash2,
                 })
@@ -394,6 +438,7 @@
                     file1_size: file2_size,
                     file2_size: file1_size,
                     ratio: ratio,
+                    ratio_normalized: ratio_normalized,
                     hash1: hash2,
                     hash2: hash1,
                 })
@@ -427,6 +472,7 @@
                                 <tr>
                                     <th scope="col">File</th>
                                     <th scope="col">Ratio</th>
+                                    <th scope="col">Ratio (Normalized)</th>
                                     <th scope="col">Hash</th>
                                     <th scope="col"></th>
                                 </tr>
@@ -448,6 +494,7 @@
                         file1_size,
                         file2_size,
                         ratio,
+                        ratio_normalized,
                         hash1,
                         hash2,
                     } = data;
@@ -457,20 +504,32 @@
                         ${file2} <span class="badge text-bg-secondary">${to_readable_filesize(file2_size)}</span>
                     </td>
                     <td>${parseFloat(ratio).toFixed(3)}</td>
+                    <td>${parseFloat(ratio_normalized).toFixed(3)}</td>
                     <td>${hash1 === hash2 ? 'Same Hash: ' + hash1 : 'Hash: ' + hash2}</td>
                     <td>
-                    <button type="button" class="btn btn-primary">
+                    <button id="compare" type="button" class="btn mb-1 btn-sm btn-primary">
                         Compare
+                    </button>
+                    <button id="compare_normalized" type="button" class="btn mb-1 btn-sm btn-primary">
+                        Compare (Normalized)
                     </button>
                     </td>
                     `
-                    dom.querySelector('button').addEventListener('click', async () => {
+                    dom.querySelector('#compare').addEventListener('click', async () => {
                         const comparerModal = new bootstrap.Modal('#comparer')
                         comparerModal.show();
-                        setCompareData('Loading...', 'Loading...')
+                        setCompareData(file1, file2, 'Loading...', 'Loading...')
                         const file1Content = (await axios.get(`/api/read_text?path=${file1_abspath}`)).data
                         const file2Content = (await axios.get(`/api/read_text?path=${file2_abspath}`)).data
-                        setCompareData(file1Content.data, file2Content.data)
+                        setCompareData(file1, file2, file1Content.data, file2Content.data)
+                    })
+                    dom.querySelector('#compare_normalized').addEventListener('click', async () => {
+                        const comparerModal = new bootstrap.Modal('#comparer')
+                        comparerModal.show();
+                        setCompareData(file1, file2, 'Loading...', 'Loading...')
+                        const file1Content = (await axios.get(`/api/read_text?path=${file1_abspath}&normalized=true`)).data
+                        const file2Content = (await axios.get(`/api/read_text?path=${file2_abspath}&normalized=true`)).data
+                        setCompareData(file1, file2, file1Content.data, file2Content.data)
                     })
                     accordionBody.appendChild(dom)
                 })
@@ -478,7 +537,7 @@
             })
         }
 
-        function setCompareData(file1Content, file2Content) {
+        function setCompareData(file1Path, file2Path, file1Content, file2Content) {
             var file1 = monaco.editor.createModel(
                 file1Content,
                 "text/plain"
@@ -491,6 +550,10 @@
                 original: file1,
                 modified: file2,
             });
+            const DOM_COMPARE_FILE1 = document.getElementById('comparer-file1Path')
+            const DOM_COMPARE_FILE2 = document.getElementById('comparer-file2Path')
+            DOM_COMPARE_FILE1.innerHTML = file1Path
+            DOM_COMPARE_FILE2.innerHTML = file2Path
         }
 
         function setAnalyzingProgress(progressPercentage) {

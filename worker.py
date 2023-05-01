@@ -7,35 +7,24 @@ import os
 import hashlib
 from cache import read_text_file_byCache
 
-_workers = []
+class WorkerPool:
 
-class Worker:
-    
-    @staticmethod
-    def run(path, ratio):
-        global _workers
-        w = Worker._getWorker(path)
-        if w is not None:
-            if w['thread'].is_alive():
-                return { 'error': 'worker is already running' }
-            else:
-                Worker._removeWorker(path)
-        t = threading.Thread(target=Worker._run, args=(path, ratio))
-        _workers.append({
-            'path': path,
-            'progress': None,
-            'result': None,
-            'thread': t,
-            'kill_signal': threading.Event(),
-        })
-        t.start()
-        return {'message': 'success'}
+    def __init__(self, path, target_ratio, worker_count):
+        self._workers = []
+        self.started = False
+        self._target_ratio = target_ratio
+        self._addWorker(worker_count)
+        self._files_pair_total = 0
+        self._files_pair = []
+        self._files_pair_lock = threading.Lock()
+        self._path = path
+        self._prepare(path)
+        self._result = []
+        self._result_lock = threading.Lock()
+        self._kill_signal = threading.Event()
 
-    @staticmethod
-    def _run(path, target_ratio = 0.9):
-        global _workers
-        w = Worker._getWorker(path)
-        # get all files
+    def _prepare(self, path):
+        print('prepare files...')
         files = []
         for root, dirs, fs in os.walk(path):
             for f in fs:
@@ -47,76 +36,84 @@ class Worker:
                 if ignore:
                     continue
                 files.append(os.path.join(root, f))
-        w['progress'] = {
-            'total': 0,
-            'current': 0,
-            'ratio': 0.0,
-        }
-        # check similar
-        similar = []
-        w['progress']['total'] = int(len(files) * (len(files) - 1) / 2)
+        print('prepare files pair...')
+        self._files_pair = []
         for i in range(len(files)):
             for j in range(i+1, len(files)):
-                # check kill signal
-                if w['kill_signal'].is_set():
-                    w['result'] = []
-                    return
-                w['progress']['current'] += 1
-                w['progress']['ratio'] = w['progress']['current'] / w['progress']['total']
-                f1_content = read_text_file_byCache(files[i])
-                f2_content = read_text_file_byCache(files[j])
-                ratio = similar_ratio(f1_content, f2_content)
-                if ratio > target_ratio:
-                    similar.append({
-                        'file1': files[i].replace(path, ''),
-                        'file2': files[j].replace(path, ''),
-                        'file1_abspath': files[i],
-                        'file2_abspath': files[j],
-                        'file1_size': os.path.getsize(files[i]),
-                        'file2_size': os.path.getsize(files[j]),
-                        'ratio': ratio,
-                        'hash1': hashlib.md5(f1_content.encode('utf-8')).hexdigest(),
-                        'hash2': hashlib.md5(f2_content.encode('utf-8')).hexdigest(),
-                    })
+                self._files_pair.append((files[i], files[j]))
+        self._files_pair_total = len(self._files_pair)
+        print('prepare files done' + str(len(self._files_pair)))
 
-        # sort by ratio
-        similar.sort(key=lambda x: x['ratio'], reverse=True)
-        w['result'] = similar
+    def _addWorker(self, count):
+        for i in range(count):
+            t = threading.Thread(target=self._run)
+            self._workers.append({
+                'thread': t
+            })
 
-    @staticmethod
-    def kill(path):
-        w = Worker._getWorker(path)
-        if w is None:
-            return { 'error': 'worker is not running' }
-        if not w['thread'].is_alive():
-            return { 'error': 'worker is not running' }
-        w['kill_signal'].set()
-        return { 'message': 'success' }
+    def _allWorkerFinished(self):
+        for w in self._workers:
+            if w['thread'].is_alive():
+                return False
+        return True
+    
+    def getProgress(self):
+        self._files_pair_lock.acquire()
+        pair = self._files_pair
+        self._files_pair_lock.release()
+        if self.started:
+            return {
+                'total': self._files_pair_total,
+                'current': self._files_pair_total - len(pair),
+                'ratio': (self._files_pair_total - len(pair)) / self._files_pair_total,
+            }
+        else:
+            return {
+                'total': 0,
+                'current': 0,
+                'ratio': 0.0,
+            }
 
-    @staticmethod
-    def _removeWorker(path):
-        global _workers
-        w = Worker._getWorker(path)
-        _workers.remove(w)
-
-    @staticmethod
-    def _getWorker(path):
-        global _workers
-        for w in _workers:
-            if w['path'] == path:
-                return w
-        return None
-
-    @staticmethod
-    def get_progress(path):
-        w = Worker._getWorker(path)
-        if w is None:
+    def getResult(self):
+        if not self._allWorkerFinished():
             return None
-        return w['progress']
+        return self._result
 
-    @staticmethod
-    def get_result(path):
-        w = Worker._getWorker(path)
-        if w is None:
-            return None
-        return w['result']
+    def _run(self):
+        while True:
+            if self._kill_signal.is_set():
+                break
+            self._files_pair_lock.acquire()
+            if len(self._files_pair) == 0:
+                self._files_pair_lock.release()
+                break
+            f1_path, f2_path = self._files_pair.pop()
+            self._files_pair_lock.release()
+            f1_content = read_text_file_byCache(f1_path)
+            f2_content = read_text_file_byCache(f2_path)
+            ratio = similar_ratio(f1_content, f2_content)
+            ratio_normalized = similar_ratio(utils.normalize_code(f1_content), utils.normalize_code(f2_content))
+            if ratio > self._target_ratio or ratio_normalized > self._target_ratio:
+                self._result_lock.acquire()
+                self._result.append({
+                    'file1': f1_path.replace(self._path, ''),
+                    'file2': f2_path.replace(self._path, ''),
+                    'file1_abspath': f1_path,
+                    'file2_abspath': f2_path,
+                    'file1_size': os.path.getsize(f1_path),
+                    'file2_size': os.path.getsize(f2_path),
+                    'ratio': ratio,
+                    'ratio_normalized': ratio_normalized,
+                    'hash1': hashlib.md5(f1_content.encode('utf-8')).hexdigest(),
+                    'hash2': hashlib.md5(f2_content.encode('utf-8')).hexdigest(),
+                })
+                self._result_lock.release()
+                
+    def StartWorker(self):
+        self.started = True
+        for w in self._workers:
+            self._kill_signal.clear()
+            w['thread'].start()
+
+    def StopWorker(self):
+        self._kill_signal.set()
