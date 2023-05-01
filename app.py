@@ -15,19 +15,28 @@ def analyze():
     path = request.args.get('path') or ''
     ratio = float(request.args.get('ratio')) or 0.9
     worker_count = int(request.args.get('workerCount')) or 8
+    ignore_path = request.args.get('ignorePath') or None
+    ignore_ratio = float(request.args.get('ignoreRatio')) or 0.9
     if not os.path.isdir(path):
         return { 'error': 'path is not a directory' }
     if not isinstance(ratio, float):
         return { 'error': 'ratio is not a float' }
+    if not isinstance(worker_count, int):
+        return { 'error': 'workerCount is not a int' }
+    if not isinstance(ignore_ratio, float):
+        return { 'error': 'ignoreRatio is not a float' }
     if ratio < 0.0 or ratio > 1.0:
         return { 'error': 'ratio is not in range 0.0-1.0' }
+    if ignore_ratio < 0.0 or ignore_ratio > 1.0:
+        return { 'error': 'ignoreRatio is not in range 0.0-1.0' }
     clear_cache()
     global _worker_pool
     while _worker_pool is not None and not _worker_pool._allWorkerFinished():
         _worker_pool.StopWorker()
         sleep(0.5)
     _worker_pool = None
-    _worker_pool = WorkerPool(path, ratio, worker_count)
+    _worker_pool = WorkerPool(
+        path, ratio, worker_count, ignore_path = ignore_path, ignore_ratio = ignore_ratio)
     _worker_pool.StartWorker()
     return {'message': 'success'}  
 
@@ -58,7 +67,6 @@ def get_progress():
         'result': result,
     }
     
-
 # list system path
 @app.route('/api/list_system_path')
 def list_system_path():

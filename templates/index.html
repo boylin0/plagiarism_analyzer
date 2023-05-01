@@ -21,8 +21,8 @@
                 <div class="row p-3">
                     <input type="text" class="col form-control" id="path"
                         value="/home/user/boyi/SmartTurnin_PARTY/c.1A.hw1.Q9" placeholder="Path">
-                    <button class="btn col-auto btn-outline-primary ms-1" data-bs-toggle="modal"
-                        data-bs-target="#folder-chooser" id="btn-choose-folder">
+                    <button class="btn col-auto btn-outline-primary ms-1 btn-choose-folder" data-bs-toggle="modal"
+                        data-input-id="path" data-bs-target="#folder-chooser">
                         Choose Folder
                     </button>
                 </div>
@@ -35,9 +35,34 @@
                 </div>
                 <div class="d-flex align-items-center mb-1">
                     Worker Count
-                    <input type="number" class="ms-1 form-control" id="worker-count" placeholder="ratio" value="8"
+                    <input type="number" class="ms-1 form-control" id="worker-count" placeholder="ratio" value="20"
                         step="1" style="max-width: 10em;">
                 </div>
+            </div>
+            <div class="card mb-2">
+                <div class="card-body">
+                    <h6>Ignore Files</h6>
+                    <div class="col-12 mb-1">
+                        Target Folder:
+                        <div class="row p-3">
+                            <input type="text" class="col form-control" id="ignore-path" value="./data/ignore"
+                                placeholder="Path">
+                            <button class="btn col-auto btn-outline-primary ms-1 btn-choose-folder"
+                                data-bs-toggle="modal" data-input-id="ignore-path" data-bs-target="#folder-chooser">
+                                Choose Folder
+                            </button>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center mb-1">
+                        Compare Ratio Greater than
+                        <input type="number" class="ms-1 form-control" id="ignore-ratio" placeholder="ratio" value="0.9"
+                            step="1" style="max-width: 10em;">
+                    </div>
+                </div>
+            </div>
+            <!-- split line -->
+            <div class="p-3">
+                <hr>
             </div>
             <div class="col-12 mb-3">
                 <button id="btn-start-analyze" type="button" class="btn btn-primary">Start Analyze</button>
@@ -50,10 +75,28 @@
                         style="width: 0%"></div>
                 </div>
             </div>
+            <div class="col-12 mb-3">
+                <div class="card">
+                    <div class="card-body">
+                        <h6>Target Folder</h6>
+                        <div class="mb-2" id="info-target-folder">
+                            ---
+                        </div>
+                        <h6>Ignore Files</h6>
+                        <div class="mb-2" id="info-ignore-files">
+                            ---
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- split line -->
+            <div class="p-3">
+                <hr>
+            </div>
             <div class="col-12 mb-1 text-end">
-                <label>
+                <label class="me-2">
                     <input type="checkbox" class="form-check-input" id="by-normalized-ratio">
-                    By Normalized Ratio
+                    Sort By Normalized Ratio
                 </label>
                 <button id="btn-start-analyze" type="button" class="btn btn-outline-secondary"
                     data-bs-target="#treeview" data-bs-toggle="modal" data-keyboard="false"
@@ -75,7 +118,7 @@
                 </thead>
                 <tbody id="compare-list">
                     <tr>
-                        <td>Please click load compare list</td>
+                        <td>Please start analyze to see the result</td>
                     </tr>
                 </tbody>
             </table>
@@ -161,7 +204,8 @@
         const DOM_COMPARE_LIST = document.getElementById('compare-list')
         const DOM_BTN_START_ANALYZE = document.getElementById('btn-start-analyze')
         const DOM_BTN_FORCE_STOP = document.getElementById('btn-force-stop')
-        const DOM_BTN_CHOOSE_FOLDER = document.getElementById('btn-choose-folder')
+        const DOM_BTNS_CHOOSE_FOLDER = document.querySelectorAll('.btn-choose-folder')
+        const DOM_FOLDER_CHOOSER = document.getElementById('folder-chooser')
         const DOM_FOLDER_CHOOSER_PATH = document.getElementById('folder-chooser-path')
         const DOM_FOLDER_CHOOSER_FOLDERS = document.getElementById('folder-chooser-folders')
         const DOM_FOLDER_CHOOSER_BTN_CURRENTFOLDER = document.getElementById('folder-chooser-btn-currentfolder')
@@ -169,6 +213,8 @@
         const DOM_TREEVIEW_SEARCH = document.getElementById('treeview-search')
         const DOM_WORKER_COUNT = document.getElementById('worker-count')
         const DOM_BY_NORMALIZED_RATIO = document.getElementById('by-normalized-ratio')
+        const DOM_IGNORE_PATH = document.getElementById('ignore-path')
+        const DOM_IGNORE_RATIO = document.getElementById('ignore-ratio')
 
         DOM_BTN_FORCE_STOP.style.display = 'none'
         new bootstrap.Modal('#treeview', { keyboard: false })
@@ -178,9 +224,14 @@
         DOM_BY_NORMALIZED_RATIO.addEventListener('change', async (e) => {
             showAnalyzedList();
         })
-        DOM_BTN_CHOOSE_FOLDER.addEventListener('click', async (e) => {
-            load_folder()
+
+        DOM_BTNS_CHOOSE_FOLDER.forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                load_folder()
+                DOM_FOLDER_CHOOSER.setAttribute('data-input-id', btn.dataset['inputId'])
+            })
         })
+
         DOM_BTN_START_ANALYZE.addEventListener('click', async (e) => {
             DOM_BTN_START_ANALYZE.classList.add('disabled')
             await start_analyze()
@@ -195,7 +246,8 @@
             }
         })
         DOM_FOLDER_CHOOSER_BTN_CURRENTFOLDER.addEventListener('click', async (e) => {
-            document.getElementById('path').value = DOM_FOLDER_CHOOSER_PATH.innerText
+            const inputId = DOM_FOLDER_CHOOSER.dataset['inputId'];
+            document.getElementById(inputId).value = DOM_FOLDER_CHOOSER_PATH.innerText
         })
         // debounce
         let timeout = null
@@ -244,7 +296,9 @@
             }
             setAnalyzingProgress(0);
             DOM_PATH.disabled = true
-            DOM_BTN_CHOOSE_FOLDER.disabled = true
+            DOM_BTNS_CHOOSE_FOLDER.forEach(btn => {
+                btn.disabled = true
+            })
             DOM_COMPARE_LIST.innerHTML = `
             <tr>
                 <td>Loading...</td>
@@ -257,6 +311,8 @@
                         path: path,
                         ratio: ratio,
                         workerCount: workerCount,
+                        ignorePath: DOM_IGNORE_PATH.value,
+                        ignoreRatio: DOM_IGNORE_RATIO.value,
                     }
                 }
             )
@@ -268,7 +324,9 @@
             if (typeof data['error'] !== 'undefined') {
                 alert(data.error)
                 DOM_PATH.disabled = false
-                DOM_BTN_CHOOSE_FOLDER.disabled = false
+                DOM_BTNS_CHOOSE_FOLDER.forEach(btn => {
+                    btn.disabled = false
+                })
                 DOM_COMPARE_LIST.innerHTML = ''
                 DOM_COMPARE_STATUS.innerText = ''
                 DOM_BTN_FORCE_STOP.style.display = 'none'
@@ -283,16 +341,24 @@
                     }
                 })).data
                 if (progressData.result !== null) {
-                    result = progressData.result
+                    result = progressData.result?.analyzed_list
                     break;
                 }
                 const total = progressData.progress?.total
                 const current = progressData.progress?.current
                 DOM_COMPARE_STATUS.innerText = `Analyzing ${current} / ${total}`
                 setAnalyzingProgress(current / total * 100)
+                // ignore files
+                document.querySelector('#info-ignore-files').innerHTML =
+                    progressData.progress?.ignore_files.map((file) => {
+                        return `<li>${file}</li>`
+                    }).join('')
+                document.querySelector('#info-target-folder').innerHTML = progressData.progress?.target_folder
             }
             DOM_PATH.disabled = false
-            DOM_BTN_CHOOSE_FOLDER.disabled = false
+            DOM_BTNS_CHOOSE_FOLDER.forEach(btn => {
+                btn.disabled = false
+            })
             window.onbeforeunload = null
             DOM_BTN_FORCE_STOP.style.display = 'none'
             setAnalyzingProgress(100)
@@ -333,7 +399,7 @@
             DOM_COMPARE_LIST.innerHTML = ``
             const byNormalizedRatio = DOM_BY_NORMALIZED_RATIO.checked
             let sortedData = window.analyzed_data?.similar;
-            if(byNormalizedRatio) {
+            if (byNormalizedRatio) {
                 sortedData = window.analyzed_data?.similar.sort((a, b) => {
                     return b.ratio_normalized - a.ratio_normalized
                 })
@@ -368,8 +434,8 @@
                         <br/>
                         ${hash1 === hash2 ? '' : `Hash: ${hash2}`}
                     </td>
-                    <td>${parseFloat(ratio).toFixed(3)}</td>
-                    <td>${parseFloat(ratio_normalized).toFixed(3)}</td>
+                    <td style="white-space:nowrap">${(parseFloat(ratio) * 100).toFixed(2)} %</td>
+                    <td style="white-space:nowrap">${(parseFloat(ratio_normalized) * 100).toFixed(2)} %</td>
                     <td>
                         <button id="compare" type="button" class="btn mb-1 btn-primary" data-bs-toggle="modal" data-bs-target="#comparer">
                             Compare
@@ -503,8 +569,8 @@
                     <td>
                         ${file2} <span class="badge text-bg-secondary">${to_readable_filesize(file2_size)}</span>
                     </td>
-                    <td>${parseFloat(ratio).toFixed(3)}</td>
-                    <td>${parseFloat(ratio_normalized).toFixed(3)}</td>
+                    <td style="white-space:nowrap">${(parseFloat(ratio) * 100).toFixed(2)} %</td>
+                    <td style="white-space:nowrap">${(parseFloat(ratio_normalized) * 100).toFixed(2)} %</td>
                     <td>${hash1 === hash2 ? 'Same Hash: ' + hash1 : 'Hash: ' + hash2}</td>
                     <td>
                     <button id="compare" type="button" class="btn mb-1 btn-sm btn-primary">
